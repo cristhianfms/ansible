@@ -1,0 +1,99 @@
+---
+- hosts: localhost
+  become: true 
+  become_user: root
+  vars:
+    mysql_root_password: password
+  
+  tasks:
+    - name: install epel-release
+        yum:
+        name: epel-release 
+        state: present
+    - name: install nginx
+      yum:
+        name: nginx 
+        state: present
+    - name: start and enable nginx during boot 
+      service:
+        name: nginx 
+        state: present
+        enabled: yes 
+    - name: install mariadb
+      yum:
+        name:
+          - mariadb-server
+          - mariadb
+      state: present
+    - name: start and enable mariadb during boot
+      service: 
+        name:mariadb 
+        state:started 
+        enabled:true
+		
+	
+    #https://stackoverflow.com/questions/25136498/ansible-answers-to-mysql-secure-installation
+    - name: Sets the root password 
+      mysql_user: user=root password="{{ mysql_root_password }}" host=localhost
+    - name: Deletes anonymous MySQL server user for ansible_fqdn
+      mysql_user: user="" host="{{ ansible_fqdn }}" state="absent"
+    - name: Deletes anonymous MySQL server user for localhost
+      mysql_user: user="" state="absent"	
+      - name: Secures the MySQL root user for IPV6 localhost (::1)
+      mysql_user: user="root" password="{{ mysql_root_password }}" host="::1"
+    - name: Secures the MySQL root user for IPV4 localhost (127.0.0.1)
+      mysql_user: user="root" password="{{ mysql_root_password }}" host="127.0.0.1"
+    - name: Secures the MySQL root user for localhost domain (localhost)
+      mysql_user: user="root" password="{{ mysql_root_password }}" host="localhost"
+    - name: Secures the MySQL root user for server_hostname domain
+      mysql_user: user="root" password="{{ mysql_root_password }}" host="{{ ansible_fqdn }}"
+    - name: Removes the MySQL test database
+    mysql_db: db=test state=absent
+
+    
+    - name: install php
+      yum: 
+        name:
+          - php
+          - php-mysql
+          - php-fpm 
+        state: present
+
+    -name : update cgi.fix_pathinfo 
+        lineinfile:
+            dest: /etc/php.ini
+            regexp: ";cgi.fix_pathinfo="
+            line: "cgi.fix_pathinfo=1"
+		
+    - name: update www.conf 
+      ini_file:
+        path: /etc/php-fpm.d/www.conf
+        option: "{{ item.option }}"
+        value: "{{ item.value }}"
+      with_items:
+        - { option: "listen", value: "/var/run/php-fpm/php-fpm.sock" }
+        - { option: "listen.owner", value: "nobody" }
+        - { option: "listen.group", value: "nobody" }
+        - { option: "user", value: "nginx" }
+        - { option: "group", value: "nginx" }
+
+
+    - name: start php-fpm and enable during boot
+        service: 
+          name:php-fpm  
+          state:started 
+          enabled:true
+
+    - name: Setup nginx conf
+      copy:
+        src=nginx.conf.
+        dest=/etc/nginx/conf.d/default.conf
+      notify: restart nginx
+  
+  handlers:
+    - name: restart nginx
+      service:
+        name=nginx
+        state=restarted
+
+	
